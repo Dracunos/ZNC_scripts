@@ -27,6 +27,9 @@ class chanman(znc.Module):
             'listfavs':         {'cmd_list': ['listfavs', 'lf', 'listf'],
                                 'func': self.list_favs,
                                 'has_args': False},
+            'resetshortcuts':   {'cmd_list': ['resetshortcuts'],
+                                'func': self.reset_shortcuts,
+                                'has_args': False},
             'autoadd':          {'cmd_list': ['autoadd'],
                                 'func': self.toggle_autoadd,
                                 'has_args': False},
@@ -54,6 +57,7 @@ class chanman(znc.Module):
         }
         self.sdir = self.GetModDataDir() + "/cmsettings"
         self.load_settings()
+        self.reset_shortcuts()
         self.load_help()
         return znc.CONTINUE
     
@@ -80,8 +84,9 @@ class chanman(znc.Module):
     def create_settings(self):
         self.settings = {
             'favs': [],
-            'groups': {},
+            'groups': {'none': []},
             'autoadd': AUTOADD_DEFAULT,
+            'shortcuts': {},
             'debug': False
         }
         self.save_settings()
@@ -112,23 +117,59 @@ class chanman(znc.Module):
                     return (cmd_dict['func'], False)
         return (False, False)
     
+    def parse_channel_list(self, chan_list):
+        chans = []
+        for item in chan_list:
+            try: # Check for shortcuts first, which are plain numbers
+                chans.append(self.settings['shortcuts'][int(item)])
+            except KeyError:
+                self.PutModule("Error: shortcut '" + item + "' not found.")
+                return
+            except ValueError:
+                if item[0] == "#": # Actual channels start with hash
+                    chans.append(item)
+                else:
+                    if item not in self.settings['groups']:
+                        self.PutModule("Error: '" + item + "' group not found.")
+                        return
+                    chans.extend(self.settings['groups'][item])
+        return chans
+    
     def add_fav(self, cmd):
-        
+        chan_list = self.parse_channel_list(cmd.split())
     
     def remove_fav(self, cmd):
-        
+        chan_list = self.parse_channel_list(cmd.split())
     
     def list_favs(self):
         
     
-    def add_group(self, cmd):
+    def reset_shortcuts(self):
         
+    
+    def add_group(self, cmd):
+        cmd = cmd.split()
+        group = cmd[0]
+        try:
+            int(group)
+            self.PutModule("Sorry, numbers are reserved for channel shortcuts.")
+            return
+        except ValueError:
+            pass
+        if group[0] == "#":
+            self.PutModule("Sorry, group names can't start with '#'.")
+            return
+        chan_list = self.parse_channel_list(cmd[1:])
     
     def remove_group(self, cmd):
-        
+        cmd = cmd.split()
+        group = cmd[0]
+        chan_list = self.parse_channel_list(cmd[1:])
     
     def set_group(self, cmd):
-        
+        cmd = cmd.split()
+        group = cmd[0]
+        chan_list = self.parse_channel_list(cmd[1:])
     
     def show_group(self, cmd):
         
@@ -137,12 +178,7 @@ class chanman(znc.Module):
         
     
     def select_group(self, cmd):
-        
-    
-    def disconnect_all(self):
-        
-    
-    def connect_all(self):
+        groups = cmd.split()
         
     
     def toggle_autoadd(self):
@@ -185,7 +221,7 @@ fmt = "{:15}|{:25}|{}"
 help_list = [
     "This module allows you to save groups of channels into 'channel groups'. "
         "Select a group to attach to only those channels, while detaching from "
-        "all others.",
+        "all others. All arguments are separated by a space.",
     "[channels] argument: one or multiple channel names/number shortcuts. You "
         "may also use a group name to indicate all the channels in the group.",
     "Default groups (cannot be deleted):",
@@ -193,6 +229,7 @@ help_list = [
     "'attached': currently attached channels.",
     "'detached': currently detached, but connected, channels.",
     "'favs': the channels currently in the favorites list.",
+    "'none': an empty group. Used to detach or disconnect from all channels."
     "----------------------------------------------------------",
     fmt.format("Command", "[Arguments]", "Description (command shortcuts)"),
     fmt.format('help', '', "Help: Show the help text. (h)"),
@@ -202,6 +239,8 @@ help_list = [
         "channel. Currently: " + str(self.settings['autoadd'])),
     fmt.format('listfavs', '', "List Favorites: List favorite channels, "
         "connected channels, and show channel number shortcuts. (lf, listf)",
+    fmt.format('resetshortcuts', '', "Reset Shortcuts: Resets the number "
+        "shortcuts list. These are normally kept consistent and not reordered.")
     fmt.format('addfav', '[channels]', "Add Favorite: Add favorite channels "
         "by channel name, number, or add all channels. If autoadd is enabled "
         "you can also simply join the channel. 'all' will add all currently "
@@ -218,9 +257,11 @@ help_list = [
         "group. (sh)"),
     fmt.format('listgroups', '', "List all groups and channels. (lg, listg)"),
     fmt.format('group', '[groupname]', "Select Group: Attaches to only the "
-        "channels in the group, detaches all others. Add the '{disconnect}' "
-        "argument in curly braces to disconnect instead of detaching. (eg: "
-        "group {disconnect} mygroupname) (grp)")
+        "channels in the group, detaches all others. Multiple groups can be "
+        "selected. This will also connect to the channel if currently "
+        "disconnected. Add the '{disconnect}' argument in curly braces to "
+        "disconnect instead of detaching. (eg: group {disconnect} mygroupname) "
+        "(grp)")
 ]
 
 
